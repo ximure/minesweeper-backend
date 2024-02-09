@@ -18,10 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @RestController
@@ -60,13 +59,13 @@ public class MinesweeperController {
         }
 
         // обработка ошибки при клике на уже открытое поле
-        if (requestGameField.getGameField()[request.getRow()][request.getCol()] != " ") {
+        if (!Objects.equals(requestGameField.getGameField()[request.getRow()][request.getCol()], " ")) {
             return ResponseEntity.badRequest().body(
                     new ErrorResponse("Уже открытая ячейка"));
         }
 
         // обновление поля по логике игры
-        MinesweeperField fieldAfterTurn = fieldUpdater.turn(
+        requestGameField = fieldUpdater.turn(
                 requestGameField,
                 request.getRow(),
                 request.getCol());
@@ -84,15 +83,15 @@ public class MinesweeperController {
     @PostMapping("/new")
     public ResponseEntity<MinesweeperResponse> createNewGame(@RequestBody @Validated NewGameRequest request) {
         // проверка значений ширины и высоты
-        boolean correctWidth = request.getWidth() > 30 ? false : true;
-        boolean correctHeight = request.getHeight() > 30 ? false : true;
+        boolean correctWidth = request.getWidth() <= 30;
+        boolean correctHeight = request.getHeight() <= 30;
         if (!correctWidth || !correctHeight) {
             StringBuilder errorStringBuilder = new StringBuilder();
             if (!correctWidth) {
                 errorStringBuilder.append("ширина ");
             }
             if (!correctHeight) {
-                if (errorStringBuilder.length() > 0) {
+                if (!errorStringBuilder.isEmpty()) {
                     errorStringBuilder.append(" и ");
                 }
                 errorStringBuilder.append("высота ");
@@ -108,8 +107,8 @@ public class MinesweeperController {
         int totalFieldSquares = request.getWidth() * request.getHeight();
         if (request.getMinesCount() >= totalFieldSquares) {
             return ResponseEntity.badRequest().body(
-                    new ErrorResponse("количество мин должно быть не менее 1 и не более "
-                            + String.valueOf(totalFieldSquares - 1)));
+                    new ErrorResponse(String.format("количество мин должно быть не менее 1 и не более %d",
+                            totalFieldSquares - 1)));
         }
 
         // создаём новое игровое поле
@@ -147,12 +146,8 @@ public class MinesweeperController {
     // удаление старых игр каждые 5 минут
     @Scheduled(fixedRate = 5 * 60 * 1000)
     private void oldGamesRemovalSchedule() {
-        Iterator<MinesweeperField> iterator = gameFields.iterator();
-        while (iterator.hasNext()) {
-            MinesweeperField field = iterator.next();
-            if (field.getGameStartTime().isBefore(LocalDateTime.now().minus(5, ChronoUnit.MINUTES))) {
-                iterator.remove();
-            }
-        }
+        gameFields.removeIf(
+                field -> field.getGameStartTime()
+                        .isBefore(LocalDateTime.now().minusMinutes(5)));
     }
 }
